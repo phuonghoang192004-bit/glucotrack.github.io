@@ -1,0 +1,1309 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GlucoTrack</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.1.0/paho-mqtt.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap');
+:root{--bg:#0a0e1a;--sur:#111827;--sur2:#1a2235;--bor:#1e2d45;--txt:#e8edf5;--mut:#64748b;--acc:#3b82f6;--acc2:#06b6d4;--ok:#22c55e;--war:#f59e0b;--dan:#ef4444;--r:12px;--r2:20px;--sh:0 4px 32px rgba(0,0,0,.45)}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--txt);font-family:'DM Sans',sans-serif;font-size:14px;min-height:100vh;line-height:1.6}
+h1,h2,h3,h4{font-family:'Syne',sans-serif}
+a{color:var(--acc);text-decoration:none}
+/* auth */
+.auth-wrap{display:none;align-items:center;justify-content:center;min-height:100vh;padding:24px;
+  background:radial-gradient(ellipse 80% 80% at 50% -20%,#1a3a6622,transparent),radial-gradient(ellipse 50% 50% at 80% 80%,#0c273a33,transparent)}
+.auth-wrap.show{display:flex}
+.auth-card{background:var(--sur);border:1px solid var(--bor);border-radius:var(--r2);padding:40px;width:100%;max-width:480px;box-shadow:var(--sh);animation:fadeUp .4s ease}
+.auth-logo{text-align:center;margin-bottom:28px}
+.auth-logo .icon{font-size:42px;display:block;margin-bottom:8px}
+.auth-logo h1{font-size:26px;font-weight:800}
+.auth-logo p{color:var(--mut);font-size:13px;margin-top:4px}
+/* steps */
+.steps{display:flex;align-items:center;justify-content:center;margin-bottom:28px;gap:0}
+.sdot{width:32px;height:32px;border-radius:50%;background:var(--sur2);border:2px solid var(--bor);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--mut);transition:all .3s;flex-shrink:0}
+.sdot.active{background:var(--acc);border-color:var(--acc);color:#fff}
+.sdot.done{background:var(--ok);border-color:var(--ok);color:#fff}
+.sline{width:44px;height:2px;background:var(--bor);flex-shrink:0}
+.sline.done{background:var(--ok)}
+/* main layout */
+.main-layout{display:none;grid-template-columns:220px 1fr;grid-template-rows:56px 1fr;min-height:100vh}
+.main-layout.show{display:grid}
+.topbar{grid-column:1/-1;background:var(--sur);border-bottom:1px solid var(--bor);display:flex;align-items:center;padding:0 20px;gap:16px}
+.brand{font-family:'Syne',sans-serif;font-weight:800;font-size:17px}
+.brand span{color:var(--acc)}
+.spacer{flex:1}
+.user-pill{display:flex;align-items:center;gap:8px;background:var(--sur2);border:1px solid var(--bor);border-radius:99px;padding:4px 14px 4px 6px;font-size:13px;cursor:pointer}
+.avatar{width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,var(--acc),var(--acc2));display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px}
+.sidebar{background:var(--sur);border-right:1px solid var(--bor);padding:20px 12px;display:flex;flex-direction:column;gap:4px}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:var(--r);cursor:pointer;font-size:13.5px;font-weight:500;color:var(--mut);transition:all .15s}
+.nav-item:hover{background:var(--sur2);color:var(--txt)}
+.nav-item.active{background:#1e3a5f;color:var(--acc)}
+.nav-icon{font-size:17px;width:22px;text-align:center}
+.nav-spacer{flex:1}
+.content{padding:28px;overflow-y:auto}
+.page{display:none}.page.active{display:block;animation:fadeUp .25s ease}
+/* form */
+.field{margin-bottom:16px}
+.field label{display:block;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--mut);margin-bottom:6px}
+.field input,.field select,.field textarea{width:100%;background:var(--sur2);border:1px solid var(--bor);border-radius:var(--r);padding:10px 14px;color:var(--txt);font-family:inherit;font-size:14px;transition:border-color .15s}
+.field input:focus,.field select:focus{outline:none;border-color:var(--acc)}
+.field select option{background:var(--sur2)}
+.field-hint{font-size:11px;color:var(--mut);margin-top:5px;line-height:1.5}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+/* buttons */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:10px 20px;border-radius:var(--r);font-family:'Syne',sans-serif;font-size:13px;font-weight:700;cursor:pointer;border:none;transition:all .15s;letter-spacing:.3px}
+.btn-primary{background:var(--acc);color:#fff;box-shadow:0 2px 12px #3b82f640}
+.btn-primary:hover{background:#2563eb;transform:translateY(-1px)}
+.btn-outline{background:transparent;color:var(--txt);border:1px solid var(--bor)}
+.btn-outline:hover{border-color:var(--acc);color:var(--acc)}
+.btn-danger{background:var(--dan);color:#fff}
+.btn-full{width:100%}
+.btn:disabled{opacity:.45;pointer-events:none}
+.btn-green{background:#0f9d58;color:#fff}
+.btn-green:hover{background:#0b8043;transform:translateY(-1px)}
+/* cards */
+.card{background:var(--sur);border:1px solid var(--bor);border-radius:var(--r2);padding:24px;margin-bottom:16px}
+.card-title{font-family:'Syne',sans-serif;font-weight:700;font-size:15px;margin-bottom:16px;display:flex;align-items:center;gap:8px}
+.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px}
+.stat-tile{background:var(--sur);border:1px solid var(--bor);border-radius:var(--r2);padding:20px;position:relative;overflow:hidden}
+.stat-tile::after{content:'';position:absolute;inset:0;background:var(--tint,transparent);opacity:.05;pointer-events:none}
+.stat-label{font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:var(--mut)}
+.stat-value{font-family:'Syne',sans-serif;font-size:32px;font-weight:800;margin:6px 0 2px}
+.stat-sub{font-size:12px;color:var(--mut)}
+/* badge */
+.badge{display:inline-block;padding:3px 10px;border-radius:99px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px}
+.badge-ok{background:#14532d;color:#86efac}
+.badge-warn{background:#78350f;color:#fde68a}
+.badge-danger{background:#7f1d1d;color:#fca5a5}
+.badge-critical{background:#991b1b;color:#fca5a5;animation:blink 1s infinite}
+.badge-info{background:#1e3a5f;color:#93c5fd}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.6}}
+/* advice */
+.advice-panel{border-radius:var(--r2);border:1px solid;padding:20px 24px;margin-top:16px;animation:fadeUp .3s ease}
+.advice-title{font-family:'Syne',sans-serif;font-size:16px;font-weight:800;margin-bottom:12px}
+.advice-steps{list-style:none}
+.advice-steps li{padding:6px 0;border-bottom:1px solid rgba(255,255,255,.06);font-size:13.5px;line-height:1.6}
+.advice-steps li:last-child{border-bottom:none}
+.type-note{margin-top:14px;padding:12px 16px;background:rgba(255,255,255,.04);border-radius:10px;font-size:13px;line-height:1.7;white-space:pre-line}
+.golden-rule{margin-top:12px;font-size:12.5px;color:var(--mut);font-style:italic;line-height:1.6}
+/* mqtt dot */
+.mdot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:5px}
+.mdot.on{background:var(--ok);box-shadow:0 0 6px var(--ok);animation:breathe 2s infinite}
+.mdot.off{background:var(--mut)}
+.mdot.conn{background:var(--war);animation:breathe 1s infinite}
+@keyframes breathe{0%,100%{opacity:1}50%{opacity:.4}}
+/* table */
+.data-table{width:100%;border-collapse:collapse;font-size:13px}
+.data-table th{text-align:left;padding:10px 14px;border-bottom:1px solid var(--bor);color:var(--mut);font-size:11px;text-transform:uppercase;letter-spacing:.6px;font-weight:600}
+.data-table td{padding:10px 14px;border-bottom:1px solid rgba(30,45,69,.6)}
+.data-table tr:last-child td{border-bottom:none}
+.data-table tr:hover td{background:var(--sur2)}
+/* tabs */
+.tabs{display:flex;gap:4px;margin-bottom:20px}
+.tab{padding:8px 18px;border-radius:99px;font-size:13px;font-weight:600;cursor:pointer;color:var(--mut);transition:all .15s;border:1px solid transparent}
+.tab:hover{color:var(--txt)}
+.tab.active{background:var(--sur2);color:var(--txt);border-color:var(--bor)}
+/* banners & alerts */
+.upd-banner{background:linear-gradient(135deg,#78350f22,#92400e33);border:1px solid #92400e66;border-radius:var(--r);padding:12px 18px;display:flex;align-items:center;gap:12px;margin-bottom:20px;font-size:13px}
+.alert{padding:10px 16px;border-radius:var(--r);font-size:13px;margin-bottom:12px}
+.alert-err{background:#7f1d1d33;border:1px solid #7f1d1d;color:#fca5a5}
+.alert-ok{background:#14532d33;border:1px solid #14532d;color:#86efac}
+.alert-info{background:#1e3a5f33;border:1px solid #1e3a5f;color:#93c5fd}
+.chart-container{position:relative;height:280px}
+::-webkit-scrollbar{width:5px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--bor);border-radius:99px}
+/* vitals */
+.vbox{background:var(--sur2);border:1px solid var(--bor);border-radius:var(--r);padding:12px 14px;text-align:center;transition:border-color .3s}
+.vbox.active{border-color:var(--acc)}
+.vlabel{font-size:10px;text-transform:uppercase;letter-spacing:.7px;color:var(--mut)}
+.vval{font-family:'Syne',sans-serif;font-size:22px;font-weight:800;margin:4px 0 0;line-height:1}
+.vsub{font-size:10px;color:var(--mut);margin-top:2px}
+/* wave animation */
+.wbar{display:inline-block;width:4px;background:var(--acc);border-radius:2px;animation:wave 1s ease-in-out infinite;min-height:6px}
+.wbar:nth-child(1){animation-delay:0s}.wbar:nth-child(2){animation-delay:.1s}.wbar:nth-child(3){animation-delay:.2s}
+.wbar:nth-child(4){animation-delay:.3s}.wbar:nth-child(5){animation-delay:.2s}.wbar:nth-child(6){animation-delay:.1s}.wbar:nth-child(7){animation-delay:0s}
+@keyframes wave{0%,100%{height:8px;opacity:.4}50%{height:32px;opacity:1}}
+.fchip{display:inline-block;padding:3px 10px;border-radius:99px;font-size:11px;font-weight:600;border:1px solid var(--bor);color:var(--mut)}
+.fchip.on{background:#1e3a5f;color:var(--acc);border-color:#2563eb44}
+/* sheets info */
+.sheets-box{background:#0f9d5811;border:1px solid #0f9d5844;border-radius:var(--r);padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;gap:12px;font-size:13px}
+/* code block */
+.code-block{background:#0f172a;border:1px solid var(--bor);border-radius:var(--r);padding:16px;font-size:11.5px;overflow-x:auto;line-height:1.7;color:#e2e8f0;white-space:pre;max-height:380px;overflow-y:auto;font-family:monospace}
+/* modal overlay */
+.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:900;align-items:flex-start;justify-content:center;padding:32px;overflow-y:auto}
+.overlay.show{display:flex}
+.modal-box{background:var(--sur);border:1px solid var(--bor);border-radius:var(--r2);padding:28px;width:100%;max-width:700px;margin:auto}
+@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+.spin{animation:spin .7s linear infinite;display:inline-block}
+@media(max-width:900px){.main-layout.show{grid-template-columns:1fr}.sidebar{display:none}.stat-grid{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════ SETUP WIZARD ═══════════════════════════════ -->
+<div id="pg-setup" class="auth-wrap">
+  <div class="auth-card">
+    <div class="auth-logo"><span class="icon">🩸</span><h1>GlucoTrack</h1><p>Thiết lập lần đầu</p></div>
+    <div class="steps" id="wizard-steps">
+      <div class="sdot active" id="s1">1</div><div class="sline" id="l1"></div>
+      <div class="sdot" id="s2">2</div><div class="sline" id="l2"></div>
+      <div class="sdot" id="s3">3</div>
+    </div>
+    <div id="setup-alert"></div>
+
+    <!-- Step 1: Profile -->
+    <div id="step1">
+      <h3 style="font-size:15px;margin-bottom:16px">👤 Thông tin cá nhân</h3>
+      <div class="row2">
+        <div class="field"><label>Tên đăng nhập</label><input id="su-user" placeholder="nguyenvana">
+          <div class="field-hint">Tên này tạo sheet riêng của bạn trên Google Sheets</div></div>
+        <div class="field"><label>Họ và tên</label><input id="su-name" placeholder="Nguyễn Văn A"></div>
+      </div>
+      <div class="row3">
+        <div class="field"><label>Tuổi</label><input id="su-age" type="number" placeholder="30" min="1" max="120"></div>
+        <div class="field"><label>Cân nặng (kg)</label><input id="su-w" type="number" placeholder="65" step="0.1"></div>
+        <div class="field"><label>Chiều cao (cm)</label><input id="su-h" type="number" placeholder="170" step="0.1"></div>
+      </div>
+      <div class="field"><label>Phân loại tiểu đường</label>
+        <select id="su-dt">
+          <option value="Type 1">Type 1 — Phụ thuộc insulin</option>
+          <option value="Type 2" selected>Type 2 — Không phụ thuộc insulin</option>
+          <option value="Pre">Tiền tiểu đường</option>
+          <option value="None">Chưa được chẩn đoán / Phòng ngừa</option>
+        </select></div>
+      <div id="s1-bmi" style="font-size:13px;color:var(--mut);margin-bottom:16px;min-height:18px"></div>
+      <button class="btn btn-primary btn-full" onclick="s1Next()">Tiếp theo →</button>
+      <p style="text-align:center;margin-top:14px;font-size:13px;color:var(--mut)">Đã có hồ sơ? <a href="#" onclick="showLogin()">Đăng nhập lại</a></p>
+    </div>
+
+    <!-- Step 2: Apps Script guide -->
+    <div id="step2" style="display:none">
+      <h3 style="font-size:15px;margin-bottom:14px">📊 Kết nối Google Sheets</h3>
+      <p style="color:var(--mut);font-size:13px;line-height:1.7;margin-bottom:16px">Dữ liệu của bạn sẽ lưu lên Google Sheets — mỗi người dùng một <strong style="color:var(--txt)">trang tính riêng</strong>. Cần thiết lập Apps Script một lần duy nhất.</p>
+      <div style="background:var(--sur2);border:1px solid var(--bor);border-radius:var(--r);padding:16px;margin-bottom:16px">
+        <div style="font-weight:700;font-size:13px;margin-bottom:10px">📋 Hướng dẫn (5 phút, 1 lần):</div>
+        <ol style="padding-left:18px;font-size:13px;color:var(--mut);line-height:2.1">
+          <li>Mở <a href="https://sheets.new" target="_blank">sheets.new</a> → tạo spreadsheet mới, đặt tên <code style="background:#0f172a;padding:1px 6px;border-radius:4px;font-size:11px;color:var(--acc2)">GlucoTrack</code></li>
+          <li>Vào menu <strong style="color:var(--txt)">Extensions → Apps Script</strong></li>
+          <li>Xoá code mẫu, nhấn <a href="#" onclick="showScriptModal()">xem & copy code Apps Script</a></li>
+          <li>Dán vào editor → <strong style="color:var(--txt)">Deploy → New deployment</strong></li>
+          <li>Type: <em>Web app</em> · Execute as: <em>Me</em> · Access: <em>Anyone</em></li>
+          <li>Copy <strong style="color:var(--txt)">Web app URL</strong> → dán vào bước tiếp theo</li>
+        </ol>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-outline" onclick="goStep(1)" style="flex:1">← Quay lại</button>
+        <button class="btn btn-primary" onclick="goStep(3)" style="flex:2">Tiếp theo →</button>
+      </div>
+    </div>
+
+    <!-- Step 3: Webhook + MQTT -->
+    <div id="step3" style="display:none">
+      <h3 style="font-size:15px;margin-bottom:16px">🔗 Kết nối & MQTT</h3>
+      <div class="field">
+        <label>Apps Script Web App URL</label>
+        <input id="su-webhook" type="url" placeholder="https://script.google.com/macros/s/.../exec">
+        <div class="field-hint">URL bạn vừa copy ở bước trên</div>
+      </div>
+      <div style="border-top:1px solid var(--bor);padding-top:16px;margin-top:4px;margin-bottom:4px">
+        <div style="font-size:13px;font-weight:700;margin-bottom:12px">📡 HiveMQ Cloud MQTT</div>
+        <div class="field"><label>Broker Host</label>
+          <input id="su-mhost" placeholder="xxxxxxxx.s1.eu.hivemq.cloud">
+          <div class="field-hint">HiveMQ Cloud → Cluster → Connection settings</div></div>
+        <div class="row2">
+          <div class="field"><label>Port (WSS)</label><input id="su-mport" type="number" value="8884"></div>
+          <div class="field"><label>Topic</label><input id="su-mtopic" value="glucotrack/sensor"></div>
+        </div>
+        <div class="row2">
+          <div class="field"><label>MQTT Username</label><input id="su-muser" placeholder="(tuỳ chọn)"></div>
+          <div class="field"><label>MQTT Password</label><input id="su-mpass" type="password" placeholder="(tuỳ chọn)"></div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-outline" onclick="goStep(2)" style="flex:1">← Quay lại</button>
+        <button class="btn btn-primary" onclick="finishSetup()" style="flex:2" id="btn-finish">✅ Bắt đầu</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════ LOGIN (trở lại) ═══════════════════════════════ -->
+<div id="pg-login" class="auth-wrap">
+  <div class="auth-card">
+    <div class="auth-logo"><span class="icon">🔑</span><h1 style="font-size:22px">Đăng nhập lại</h1><p>Nhập tên & URL để tải hồ sơ</p></div>
+    <div id="login-alert"></div>
+    <div class="field"><label>Tên đăng nhập</label><input id="li-user" placeholder="nguyenvana"></div>
+    <div class="field"><label>Apps Script Web App URL</label>
+      <input id="li-webhook" type="url" placeholder="https://script.google.com/macros/s/.../exec"></div>
+    <div class="field"><label>MQTT Broker Host</label><input id="li-mhost" placeholder="xxxxxxxx.s1.eu.hivemq.cloud"></div>
+    <div class="row2">
+      <div class="field"><label>MQTT Port</label><input id="li-mport" type="number" value="8884"></div>
+      <div class="field"><label>MQTT Topic</label><input id="li-mtopic" value="glucotrack/sensor"></div>
+    </div>
+    <div class="row2">
+      <div class="field"><label>MQTT Username</label><input id="li-muser"></div>
+      <div class="field"><label>MQTT Password</label><input id="li-mpass" type="password"></div>
+    </div>
+    <button class="btn btn-primary btn-full" onclick="doLogin()">Đăng nhập</button>
+    <p style="text-align:center;margin-top:14px;font-size:13px;color:var(--mut)"><a href="#" onclick="showSetup()">← Tạo hồ sơ mới</a></p>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════ APPS SCRIPT MODAL ═══════════════════════════════ -->
+<div class="overlay" id="modal-script">
+  <div class="modal-box">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <h3 style="font-size:16px">📋 Code Google Apps Script</h3>
+      <button onclick="closeModal('modal-script')" style="background:none;border:none;color:var(--mut);cursor:pointer;font-size:20px;line-height:1">✕</button>
+    </div>
+    <p style="color:var(--mut);font-size:13px;margin-bottom:12px">Copy toàn bộ đoạn code dưới đây, dán vào Apps Script Editor:</p>
+    <div class="code-block" id="script-code-block"></div>
+    <button class="btn btn-primary btn-full" style="margin-top:14px" onclick="copyScript()">📋 Copy code</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════ MAIN APP ═══════════════════════════════ -->
+<div id="pg-app" class="main-layout">
+
+  <header class="topbar">
+    <div class="brand">Gluco<span>Track</span></div>
+    <div class="spacer"></div>
+    <div id="mqtt-top" style="font-size:12px;color:var(--mut)"><span class="mdot off" id="dot-top"></span>MQTT: –</div>
+    <a id="sheets-top-link" href="#" target="_blank" style="font-size:12px;color:var(--mut);display:flex;align-items:center;gap:4px" title="Mở Google Sheets">📊 Sheets</a>
+    <div class="user-pill" onclick="navTo('profile')">
+      <div class="avatar" id="hdr-av">?</div>
+      <span id="hdr-name">–</span>
+    </div>
+    <button class="btn btn-outline" style="padding:6px 14px;font-size:12px" onclick="doLogout()">Đăng xuất</button>
+  </header>
+
+  <nav class="sidebar">
+    <div class="nav-item active" onclick="navTo('dashboard')" data-page="dashboard"><span class="nav-icon">📊</span>Dashboard</div>
+    <div class="nav-item" onclick="navTo('measure')" data-page="measure"><span class="nav-icon">🔬</span>Đo ngay</div>
+    <div class="nav-item" onclick="navTo('history')" data-page="history"><span class="nav-icon">📋</span>Lịch sử</div>
+    <div class="nav-item" onclick="navTo('chart')" data-page="chart"><span class="nav-icon">📈</span>Biểu đồ</div>
+    <div class="nav-item nav-spacer" onclick="navTo('profile')" data-page="profile"><span class="nav-icon">👤</span>Hồ sơ</div>
+  </nav>
+
+  <main class="content">
+    <div id="upd-banner" class="upd-banner" style="display:none">
+      <span style="font-size:22px">⏰</span>
+      <div style="flex:1"><strong style="color:#fde68a;display:block">Đã đến lúc cập nhật hồ sơ sức khỏe!</strong>Chưa cập nhật <span id="days-ago">7</span> ngày. Cập nhật để đảm bảo tính toán chính xác.</div>
+      <button class="btn btn-outline" style="font-size:12px;white-space:nowrap" onclick="navTo('profile')">Cập nhật ngay</button>
+    </div>
+
+    <!-- ════ DASHBOARD ════ -->
+    <div id="page-dashboard" class="page active">
+      <h2 style="margin-bottom:20px;font-size:20px">Tổng quan <span style="color:var(--mut);font-weight:400;font-size:14px">hôm nay</span></h2>
+      <div class="stat-grid">
+        <div class="stat-tile" style="--tint:#3b82f6"><div class="stat-label">Lần đo gần nhất</div><div class="stat-value" id="st-last" style="color:var(--acc)">–</div><div class="stat-sub" id="st-last-t">chưa có dữ liệu</div></div>
+        <div class="stat-tile" style="--tint:#22c55e"><div class="stat-label">Trung bình 7 ngày</div><div class="stat-value" id="st-avg" style="color:var(--ok)">–</div><div class="stat-sub">mg/dL</div></div>
+        <div class="stat-tile" style="--tint:#f59e0b"><div class="stat-label">Cao nhất hôm nay</div><div class="stat-value" id="st-max" style="color:var(--war)">–</div><div class="stat-sub">mg/dL</div></div>
+        <div class="stat-tile" style="--tint:#06b6d4"><div class="stat-label">Tổng lần đo</div><div class="stat-value" id="st-cnt" style="color:var(--acc2)">0</div><div class="stat-sub">tất cả thời gian</div></div>
+      </div>
+      <div class="card"><div class="card-title">📈 Xu hướng 14 ngày gần nhất</div><div class="chart-container"><canvas id="chart-home"></canvas></div></div>
+      <div class="card" id="last-card" style="display:none"><div class="card-title">🔍 Kết quả đo gần nhất</div><div id="last-detail"></div></div>
+    </div>
+
+    <!-- ════ MEASURE ════ -->
+    <div id="page-measure" class="page">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:12px">
+        <div><h2 style="font-size:22px;margin-bottom:2px">Đo đường huyết</h2><div style="color:var(--mut);font-size:13px">AS7341 + MAX30102 → HiveMQ → Web</div></div>
+        <div class="tabs" style="margin:0">
+          <div class="tab active" id="tab-sensor" onclick="switchTab('sensor')">🔬 Cảm biến</div>
+          <div class="tab" id="tab-manual" onclick="switchTab('manual')">✏️ Nhập tay</div>
+        </div>
+      </div>
+
+      <!-- SENSOR TAB -->
+      <div id="mtab-sensor">
+        <div style="display:grid;grid-template-columns:340px 1fr;gap:16px;align-items:start">
+          <!-- LEFT -->
+          <div>
+            <div class="card" style="margin-bottom:14px">
+              <div class="card-title" style="margin-bottom:12px">📡 Kết nối MQTT</div>
+              <div style="background:var(--sur2);border:1px solid var(--bor);border-radius:var(--r);padding:10px 14px;margin-bottom:12px;font-size:12.5px">
+                Topic: <code id="topic-disp" style="color:var(--acc2);font-family:monospace;font-size:12px">glucotrack/sensor</code>
+              </div>
+              <button class="btn btn-primary btn-full" id="btn-mqtt" onclick="toggleMqtt()">Kết nối HiveMQ</button>
+              <div style="margin-top:10px;font-size:12.5px;display:flex;align-items:center;gap:6px">
+                <span class="mdot off" id="dot-meas"></span><span id="mqtt-txt" style="color:var(--mut)">Chưa kết nối</span>
+              </div>
+            </div>
+
+            <div class="card" style="margin-bottom:14px">
+              <div class="card-title" style="margin-bottom:14px;font-size:13px">📡 Tín hiệu thời gian thực</div>
+              <div id="finger-pill" style="display:flex;align-items:center;gap:8px;padding:10px 14px;border-radius:10px;background:var(--sur2);border:1px solid var(--bor);margin-bottom:14px;transition:all .3s">
+                <div id="finger-dot" style="width:10px;height:10px;border-radius:50%;background:var(--mut);flex-shrink:0;transition:background .3s"></div>
+                <span id="finger-lbl" style="font-size:12.5px;color:var(--mut)">Chưa phát hiện ngón tay</span>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+                <div class="vbox"><div class="vlabel">IR Signal</div><div id="v-ir" class="vval">–</div><div class="vsub" id="v-ir-q"></div></div>
+                <div class="vbox"><div class="vlabel">Nhịp tim</div><div id="v-hr" class="vval" style="color:var(--dan)">–</div><div class="vsub">bpm</div></div>
+                <div class="vbox"><div class="vlabel">SpO₂</div><div id="v-spo2" class="vval" style="color:var(--ok)">–</div><div class="vsub">%</div></div>
+                <div class="vbox"><div class="vlabel">Nhiệt độ</div><div id="v-temp" class="vval" style="color:var(--acc2)">–</div><div class="vsub">°C</div></div>
+              </div>
+              <div id="filter-badge" style="display:none;margin-top:12px;font-size:11px;color:var(--mut);text-align:center;padding:6px;background:var(--sur2);border-radius:8px">SMA ✓ &nbsp;|&nbsp; Median ✓ &nbsp;|&nbsp; LPF ✓</div>
+            </div>
+
+            <div class="card" style="padding:16px">
+              <div class="field" style="margin-bottom:0"><label>Ghi chú (tuỳ chọn)</label>
+                <input id="meas-note" placeholder="Lúc đói / sau ăn 2h / sau tập..."></div>
+            </div>
+          </div>
+
+          <!-- RIGHT -->
+          <div>
+            <div class="card" id="meas-card" style="padding:32px;text-align:center;min-height:420px;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative;overflow:hidden">
+              <div id="meas-glow" style="position:absolute;inset:0;border-radius:inherit;background:transparent;transition:background 1.5s;pointer-events:none"></div>
+
+              <!-- IDLE -->
+              <div id="ms-idle">
+                <div style="font-size:72px;margin-bottom:16px;opacity:.6">🩸</div>
+                <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:700;margin-bottom:8px">Sẵn sàng đo</div>
+                <div style="color:var(--mut);font-size:13px;margin-bottom:28px;line-height:1.6">Kết nối MQTT & đặt ngón tay<br>rồi bấm Bắt đầu</div>
+                <button class="btn btn-primary" id="btn-start" onclick="startMeasure()" style="padding:14px 40px;font-size:15px;border-radius:99px;box-shadow:0 4px 24px #3b82f650" disabled>▶ Bắt đầu đo</button>
+                <div id="start-hint" style="margin-top:12px;font-size:12px;color:var(--mut)">Kết nối MQTT và đặt ngón tay trước</div>
+              </div>
+
+              <!-- MEASURING -->
+              <div id="ms-measuring" style="display:none;width:100%">
+                <div style="font-family:'Syne',sans-serif;font-size:14px;font-weight:700;color:var(--acc);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:24px">Đang thu thập tín hiệu</div>
+                <div style="position:relative;width:180px;height:180px;margin:0 auto 24px">
+                  <svg width="180" height="180" style="transform:rotate(-90deg)">
+                    <circle cx="90" cy="90" r="78" fill="none" stroke="#1e2d45" stroke-width="8"/>
+                    <circle id="prog-ring" cx="90" cy="90" r="78" fill="none" stroke="url(#rg)" stroke-width="8" stroke-linecap="round" stroke-dasharray="490" stroke-dashoffset="490" style="transition:stroke-dashoffset .5s ease"/>
+                    <defs><linearGradient id="rg" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#3b82f6"/><stop offset="100%" stop-color="#06b6d4"/></linearGradient></defs>
+                  </svg>
+                  <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center">
+                    <div id="cdown" style="font-family:'Syne',sans-serif;font-size:42px;font-weight:800;line-height:1">10</div>
+                    <div style="font-size:11px;color:var(--mut);margin-top:2px">giây</div>
+                  </div>
+                </div>
+                <div style="display:flex;align-items:center;justify-content:center;gap:3px;margin-bottom:20px">
+                  <span class="wbar"></span><span class="wbar"></span><span class="wbar"></span>
+                  <span class="wbar"></span><span class="wbar"></span><span class="wbar"></span><span class="wbar"></span>
+                </div>
+                <div id="samp-cnt" style="font-size:12px;color:var(--mut);margin-bottom:20px">0 mẫu đã thu thập</div>
+                <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+                  <span class="fchip on">SMA(8)</span><span class="fchip on">Median(7)</span><span class="fchip on">LPF(α=0.15)</span>
+                </div>
+              </div>
+
+              <!-- DONE -->
+              <div id="ms-done" style="display:none;width:100%">
+                <div id="res-icon" style="font-size:52px;margin-bottom:8px">✅</div>
+                <div style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--mut);margin-bottom:4px">Đường huyết ước tính</div>
+                <div id="res-glucose" style="font-family:'Syne',sans-serif;font-size:72px;font-weight:800;line-height:1;margin-bottom:4px">–</div>
+                <div style="font-size:16px;color:var(--mut);margin-bottom:12px">mg/dL</div>
+                <div id="res-badge" style="margin-bottom:20px"></div>
+                <div id="res-vitals" style="display:flex;gap:16px;justify-content:center;font-size:12px;color:var(--mut);margin-bottom:24px;flex-wrap:wrap"></div>
+                <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+                  <button class="btn btn-outline" onclick="startMeasure()" style="border-radius:99px;padding:10px 24px">🔁 Đo lại</button>
+                  <button class="btn btn-primary" onclick="saveAndAdvice()" style="border-radius:99px;padding:10px 24px">💾 Lưu & khuyến cáo</button>
+                </div>
+                <div id="res-saved" style="display:none;margin-top:10px;font-size:12px;color:var(--ok)">✓ Đã lưu vào Google Sheets</div>
+              </div>
+            </div>
+            <div id="meas-advice" style="display:none;margin-top:16px"></div>
+          </div>
+        </div>
+      </div><!-- /sensor tab -->
+
+      <!-- MANUAL TAB -->
+      <div id="mtab-manual" style="display:none;max-width:520px">
+        <div class="card">
+          <div class="card-title">✏️ Nhập từ máy que thử</div>
+          <div id="man-alert"></div>
+          <div class="row2">
+            <div class="field"><label>Đường huyết (mg/dL)</label><input id="m-g" type="number" placeholder="120" min="20" max="600" step="0.1"></div>
+            <div class="field"><label>Nhịp tim (nếu biết)</label><input id="m-hr" type="number" placeholder="72" min="30" max="200"></div>
+          </div>
+          <div class="field"><label>Ghi chú</label><input id="m-note" placeholder="Lúc đói / sau ăn / trước khi ngủ..."></div>
+          <button class="btn btn-primary btn-full" onclick="doManual()">💾 Lưu kết quả</button>
+        </div>
+        <div id="man-advice" style="display:none;margin-top:4px"></div>
+      </div>
+    </div><!-- /measure -->
+
+    <!-- ════ HISTORY ════ -->
+    <div id="page-history" class="page">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px">
+        <h2 style="font-size:20px">Lịch sử đo</h2>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-outline" onclick="exportCSV()" style="font-size:12px;padding:7px 14px">⬇ Xuất CSV</button>
+          <button class="btn btn-outline" onclick="syncSheets()" style="font-size:12px;padding:7px 14px" id="btn-sync">🔄 Đồng bộ Sheets</button>
+        </div>
+      </div>
+      <div class="card" style="padding:0;overflow:hidden">
+        <table class="data-table">
+          <thead><tr><th>Thời gian</th><th>Glucose</th><th>Trạng thái</th><th>HR</th><th>SpO₂</th><th>Ghi chú</th></tr></thead>
+          <tbody id="hist-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ════ CHART ════ -->
+    <div id="page-chart" class="page">
+      <h2 style="margin-bottom:20px;font-size:20px">Biểu đồ theo dõi</h2>
+      <div class="tabs" id="chart-tabs">
+        <div class="tab active" onclick="switchRange(7)">7 ngày</div>
+        <div class="tab" onclick="switchRange(14)">14 ngày</div>
+        <div class="tab" onclick="switchRange(30)">30 ngày</div>
+        <div class="tab" onclick="switchRange(0)">Tất cả</div>
+      </div>
+      <div class="card"><div class="card-title">📈 Đường huyết theo thời gian</div><div class="chart-container" style="height:320px"><canvas id="chart-main"></canvas></div></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+        <div class="card"><div class="card-title">🕐 Phân bố theo giờ</div><div class="chart-container" style="height:220px"><canvas id="chart-hour"></canvas></div></div>
+        <div class="card"><div class="card-title">🎯 Phân loại</div><div class="chart-container" style="height:220px"><canvas id="chart-pie"></canvas></div></div>
+      </div>
+    </div>
+
+    <!-- ════ PROFILE ════ -->
+    <div id="page-profile" class="page">
+      <h2 style="margin-bottom:20px;font-size:20px">Hồ sơ sức khỏe</h2>
+      <div id="pf-alert"></div>
+      <div class="sheets-box">
+        <span style="font-size:22px">📊</span>
+        <div style="flex:1"><div style="font-weight:600;font-size:13px;margin-bottom:2px">Dữ liệu lưu trên Google Sheets</div>
+          <div style="color:var(--mut);font-size:12px">Mỗi lần đo được ghi vào trang tính riêng của bạn</div></div>
+        <a id="sheets-btn" href="#" target="_blank" class="btn btn-green" style="padding:8px 14px;font-size:12px">📊 Mở Sheets</a>
+      </div>
+      <div class="card">
+        <div class="card-title">👤 Thông tin cá nhân</div>
+        <div class="row2">
+          <div class="field"><label>Tuổi</label><input id="pf-age" type="number" min="1" max="120"></div>
+          <div class="field"><label>Cân nặng (kg)</label><input id="pf-w" type="number" step="0.1"></div>
+        </div>
+        <div class="row2">
+          <div class="field"><label>Chiều cao (cm)</label><input id="pf-h" type="number" step="0.1"></div>
+          <div class="field"><label>Phân loại tiểu đường</label>
+            <select id="pf-dt">
+              <option value="Type 1">Type 1 — Phụ thuộc insulin</option>
+              <option value="Type 2">Type 2 — Không phụ thuộc insulin</option>
+              <option value="Pre">Tiền tiểu đường</option>
+              <option value="None">Chưa được chẩn đoán / Phòng ngừa</option>
+            </select></div>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <button class="btn btn-primary" onclick="updateProfile()">💾 Lưu cập nhật</button>
+          <span id="pf-bmi" style="color:var(--mut);font-size:13px"></span>
+        </div>
+      </div>
+      <div class="card"><div class="card-title">📊 Thống kê tài khoản</div><div id="pf-stats" style="display:grid;grid-template-columns:1fr 1fr;gap:12px"></div></div>
+    </div>
+
+  </main>
+</div><!-- /main-layout -->
+
+<script>
+'use strict';
+
+// ════════════════════════════════════════════════════════════
+//  APPS SCRIPT CODE (nhúng trong HTML để hiển thị cho user)
+// ════════════════════════════════════════════════════════════
+const GAS_CODE = `// GlucoTrack — Google Apps Script
+// Deploy → New deployment → Web app
+// Execute as: Me  |  Who has access: Anyone
+// ─────────────────────────────────────────────────
+
+const HEADERS = [
+  "timestamp","glucose_mgdl","status",
+  "ir_raw","nir","red_raw","hr_bpm","spo2","temp_c",
+  "f1","f2","f3","f4","f5","f6","f7","f8",
+  "nir_clear_ratio","ir_red_ratio","bmi_at_measure","note"
+];
+
+// ── ENTRY POINTS ─────────────────────────────────
+function doPost(e) {
+  try {
+    const body = JSON.parse(e.postData.contents);
+    const ss   = SpreadsheetApp.getActiveSpreadsheet();
+    switch (body.action) {
+      case "register":       return R(registerUser(ss, body));
+      case "update_profile": return R(updateProfile(ss, body));
+      case "save_reading":   return R(saveReading(ss, body));
+      default:               return R({ok:false, msg:"unknown action"});
+    }
+  } catch(err) { return R({ok:false, msg:err.toString()}); }
+}
+
+function doGet(e) {
+  try {
+    const p  = e.parameter;
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    switch (p.action) {
+      case "get_profile":  return R(getProfile(ss, p.username));
+      case "get_readings": return R(getReadings(ss, p.username));
+      default:             return R({ok:false, msg:"unknown action"});
+    }
+  } catch(err) { return R({ok:false, msg:err.toString()}); }
+}
+
+function R(obj) {
+  return ContentService
+    .createTextOutput(JSON.stringify(obj))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+// ── HELPERS ──────────────────────────────────────
+function getOrCreate(ss, name) {
+  return ss.getSheetByName(name) || ss.insertSheet(name);
+}
+
+function sheetToObjects(sheet) {
+  if (sheet.getLastRow() < 2) return [];
+  const [header, ...rows] = sheet.getDataRange().getValues();
+  return rows.map(r => Object.fromEntries(header.map((h,i)=>[h, r[i]])));
+}
+
+// ── PROFILE ──────────────────────────────────────
+function registerUser(ss, d) {
+  const pSheet = getOrCreate(ss, "Profiles");
+  // init header nếu chưa có
+  if (pSheet.getLastRow() === 0) {
+    pSheet.appendRow(["username","display_name","age","weight_kg",
+      "height_cm","diabetes_type","bmi","profile_updated","created"]);
+    pSheet.setFrozenRows(1);
+  }
+  // Kiểm tra trùng username
+  const vals = pSheet.getLastRow() > 1
+    ? pSheet.getRange(2, 1, pSheet.getLastRow()-1, 1).getValues().flat()
+    : [];
+  if (vals.includes(d.username))
+    return {ok:false, msg:"Tên đăng nhập đã tồn tại"};
+
+  const bmi   = +(d.weight_kg / Math.pow(d.height_cm/100,2)).toFixed(1);
+  const today = new Date().toISOString().slice(0,10);
+  pSheet.appendRow([d.username, d.display_name, d.age, d.weight_kg,
+    d.height_cm, d.diabetes_type, bmi, today, today]);
+
+  // Tạo sheet riêng cho user + header
+  const uSheet = getOrCreate(ss, d.username);
+  if (uSheet.getLastRow() === 0) {
+    uSheet.appendRow(HEADERS);
+    uSheet.setFrozenRows(1);
+    uSheet.setColumnWidth(1, 160);
+  }
+  return {ok:true, user:makeUserObj(d.username, d.display_name, d.age,
+    d.weight_kg, d.height_cm, d.diabetes_type, bmi, today, today)};
+}
+
+function getProfile(ss, username) {
+  const pSheet = getOrCreate(ss, "Profiles");
+  if (pSheet.getLastRow() < 2) return {ok:false, msg:"Không tìm thấy hồ sơ"};
+  const rows = sheetToObjects(pSheet);
+  const u    = rows.find(r => r.username === username);
+  return u ? {ok:true, user:u} : {ok:false, msg:"Không tìm thấy hồ sơ"};
+}
+
+function updateProfile(ss, d) {
+  const pSheet = getOrCreate(ss, "Profiles");
+  if (pSheet.getLastRow() < 2) return {ok:false, msg:"Không tìm thấy user"};
+  const data = pSheet.getDataRange().getValues();
+  const header = data[0];
+  const uIdx   = header.indexOf("username");
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][uIdx] !== d.username) continue;
+    const set = (col, val) => {
+      const ci = header.indexOf(col);
+      if (ci >= 0 && val !== undefined) pSheet.getRange(i+1, ci+1).setValue(val);
+    };
+    set("age",           d.age);
+    set("weight_kg",     d.weight_kg);
+    set("height_cm",     d.height_cm);
+    set("diabetes_type", d.diabetes_type);
+    const w = d.weight_kg || data[i][header.indexOf("weight_kg")];
+    const h = d.height_cm || data[i][header.indexOf("height_cm")];
+    const bmi = +(w / Math.pow(h/100,2)).toFixed(1);
+    set("bmi",             bmi);
+    set("profile_updated", new Date().toISOString().slice(0,10));
+    const updated = pSheet.getRange(i+1,1,1,header.length).getValues()[0];
+    return {ok:true, user:makeUserObj(...updated)};
+  }
+  return {ok:false, msg:"Không tìm thấy user"};
+}
+
+// ── READINGS ─────────────────────────────────────
+function saveReading(ss, d) {
+  const uSheet = getOrCreate(ss, d.username);
+  if (uSheet.getLastRow() === 0) {
+    uSheet.appendRow(HEADERS);
+    uSheet.setFrozenRows(1);
+  }
+  const row = HEADERS.map(h => d.row[h] !== undefined ? d.row[h] : "");
+  uSheet.appendRow(row);
+  return {ok:true};
+}
+
+function getReadings(ss, username) {
+  const sheet = ss.getSheetByName(username);
+  if (!sheet || sheet.getLastRow() < 2) return {ok:true, readings:[]};
+  return {ok:true, readings: sheetToObjects(sheet)};
+}
+
+function makeUserObj(username,display_name,age,weight_kg,height_cm,
+    diabetes_type,bmi,profile_updated,created){
+  return {username,display_name,age,weight_kg,height_cm,
+    diabetes_type,bmi,profile_updated,created};
+}`;
+
+// ════════════════════════════════════════════════════════════
+//  SIGNAL FILTER (mirrors Python SignalFilter 3-layer)
+// ════════════════════════════════════════════════════════════
+class SigFilter {
+  constructor(){ this.sma=[]; this.med=[]; this.lpf=null; }
+  push(x){
+    this.sma.push(x); if(this.sma.length>8) this.sma.shift();
+    const s = this.sma.reduce((a,b)=>a+b,0)/this.sma.length;
+    this.med.push(s); if(this.med.length>7) this.med.shift();
+    const sorted=[...this.med].sort((a,b)=>a-b);
+    const m = sorted[Math.floor(sorted.length/2)];
+    if(this.lpf===null) this.lpf=m;
+    this.lpf = 0.15*m + 0.85*this.lpf;
+    return this.lpf;
+  }
+  reset(){ this.sma=[]; this.med=[]; this.lpf=null; }
+}
+const FILTER_KEYS = ['ir_raw','red_raw','nir','hr_bpm','spo2','temp_c',
+                     'f1','f2','f3','f4','f5','f6','f7','f8'];
+const filters = {};
+FILTER_KEYS.forEach(k=>filters[k]=new SigFilter());
+
+// ════════════════════════════════════════════════════════════
+//  STATE
+// ════════════════════════════════════════════════════════════
+let U = null;          // currentUser
+let readings = [];
+let mqttClient = null, mqttOK = false;
+let hasFinger = false, liveData = null;
+let msState = 'idle';  // 'idle' | 'measuring' | 'done'
+let msActive=false, msStart=0, msSamples=[], msDone=false, msResult=null;
+let waveIv=null, lastSaved=null;
+let chartRange=7;
+let cHome=null, cMain=null, cHour=null, cPie=null;
+
+// ════════════════════════════════════════════════════════════
+//  SETUP WIZARD
+// ════════════════════════════════════════════════════════════
+let wizData = {};
+
+function goStep(n){
+  [1,2,3].forEach(i=>{
+    el('step'+i).style.display = i===n?'':'none';
+    const d=el('s'+i); d.className='sdot'+(i<n?' done':i===n?' active':'');
+    if(i<3){ const l=el('l'+i); l.className='sline'+(i<n?' done':''); }
+  });
+}
+function s1Next(){
+  const user=v('su-user').trim().toLowerCase(), name=v('su-name').trim();
+  const age=+v('su-age'), w=+v('su-w'), h=+v('su-h'), dt=v('su-dt');
+  if(!user||!name||!age||!w||!h){ alert2('setup-alert','Điền đầy đủ thông tin','err'); return; }
+  const bmi=+(w/(h/100)**2).toFixed(1);
+  wizData={username:user,display_name:name,age,weight_kg:w,height_cm:h,diabetes_type:dt,bmi};
+  alert2('setup-alert','','');
+  goStep(2);
+}
+async function finishSetup(){
+  const webhook=v('su-webhook').trim(), mhost=v('su-mhost').trim();
+  const mport=+v('su-mport')||8884, mtopic=v('su-mtopic').trim()||'glucotrack/sensor';
+  const muser=v('su-muser').trim(), mpass=v('su-mpass').trim();
+  if(!webhook||!mhost){ alert2('setup-alert','Cần nhập Web App URL và MQTT Host','err'); return; }
+  el('btn-finish').disabled=true; el('btn-finish').textContent='⏳ Đang đăng ký...';
+  const r=await gasPost(webhook,{action:'register',...wizData});
+  el('btn-finish').disabled=false; el('btn-finish').textContent='✅ Bắt đầu';
+  if(!r.ok){ alert2('setup-alert',r.msg||'Lỗi kết nối Apps Script','err'); return; }
+  const cfg={username:wizData.username,display_name:wizData.display_name,
+    webhook,mhost,mport,mtopic,muser,mpass,profile_updated:new Date().toISOString().slice(0,10)};
+  saveConfig(cfg);
+  U={...r.user,...cfg};
+  setupMqttConfig();
+  afterLogin();
+}
+['su-w','su-h'].forEach(id=>{
+  document.getElementById(id)?.addEventListener('input',()=>{
+    const w=+v('su-w'),h=+v('su-h');
+    if(w>0&&h>0) el('s1-bmi').textContent=`BMI ≈ ${(w/(h/100)**2).toFixed(1)}`;
+  });
+});
+
+// ════════════════════════════════════════════════════════════
+//  LOGIN
+// ════════════════════════════════════════════════════════════
+function showSetup(){ el('pg-login').classList.remove('show'); el('pg-setup').classList.add('show'); }
+function showLogin(){ el('pg-setup').classList.remove('show'); el('pg-login').classList.add('show'); }
+
+async function doLogin(){
+  const user=v('li-user').trim().toLowerCase(), webhook=v('li-webhook').trim();
+  const mhost=v('li-mhost').trim(), mport=+v('li-mport')||8884;
+  const mtopic=v('li-mtopic').trim()||'glucotrack/sensor';
+  const muser=v('li-muser').trim(), mpass=v('li-mpass').trim();
+  if(!user||!webhook||!mhost){ alert2('login-alert','Điền đầy đủ thông tin','err'); return; }
+  alert2('login-alert','<div class="alert alert-info">⏳ Đang tải hồ sơ...</div>','');
+  const r=await gasGet(webhook,{action:'get_profile',username:user});
+  if(!r.ok){ alert2('login-alert',r.msg||'Không tìm thấy hồ sơ','err'); return; }
+  const cfg={username:user,display_name:r.user.display_name,
+    webhook,mhost,mport,mtopic,muser,mpass,profile_updated:r.user.profile_updated};
+  saveConfig(cfg);
+  U={...r.user,...cfg};
+  setupMqttConfig();
+  await loadReadings();
+  afterLogin();
+}
+function doLogout(){
+  disconnectMqtt();
+  U=null; readings=[];
+  localStorage.removeItem('gt_cfg');
+  el('pg-app').classList.remove('show');
+  el('pg-setup').classList.add('show');
+  goStep(1);
+}
+
+// ════════════════════════════════════════════════════════════
+//  PAGE / NAV
+// ════════════════════════════════════════════════════════════
+function afterLogin(){
+  el('pg-setup').classList.remove('show');
+  el('pg-login').classList.remove('show');
+  el('pg-app').classList.add('show');
+  el('hdr-name').textContent = U.display_name||U.username||'–';
+  el('hdr-av').textContent   = (U.display_name||'U')[0].toUpperCase();
+  const sheetUrl = `https://docs.google.com/spreadsheets/d/open?url=${encodeURIComponent(U.webhook||'')}`;
+  el('sheets-top-link').href = U.webhook||'#';
+  el('sheets-btn').href      = U.webhook||'#';
+  if(el('topic-disp') && U.mtopic) el('topic-disp').textContent = U.mtopic;
+  const daysSince = Math.floor((Date.now()-new Date(U.profile_updated||'2000-01-01'))/864e5);
+  if(daysSince>=7){ el('upd-banner').style.display='flex'; el('days-ago').textContent=daysSince; }
+  setTimeout(()=>connectMqtt(),400);
+  refreshDashboard();
+}
+function navTo(name){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  el('page-'+name)?.classList.add('active');
+  document.querySelectorAll(`[data-page="${name}"]`).forEach(n=>n.classList.add('active'));
+  if(name==='dashboard') refreshDashboard();
+  if(name==='history')   renderHistory();
+  if(name==='chart')     renderCharts(chartRange);
+  if(name==='profile')   loadProfileForm();
+}
+
+// ════════════════════════════════════════════════════════════
+//  GOOGLE APPS SCRIPT  (gasGet = GET,  gasPost = POST)
+// ════════════════════════════════════════════════════════════
+async function gasGet(url, params){
+  try{
+    const q = new URLSearchParams(params).toString();
+    const r = await fetch(`${url}?${q}`,{redirect:'follow'});
+    return await r.json();
+  }catch(e){ return {ok:false,msg:e.message}; }
+}
+async function gasPost(url, payload){
+  try{
+    // Content-Type text/plain avoids CORS preflight for Apps Script
+    const r = await fetch(url,{method:'POST',headers:{'Content-Type':'text/plain'},
+      body:JSON.stringify(payload),redirect:'follow'});
+    const txt = await r.text();
+    return JSON.parse(txt);
+  }catch(e){ return {ok:false,msg:e.message}; }
+}
+async function gasSaveReading(row){
+  if(!U?.webhook) return false;
+  const r=await gasPost(U.webhook,{action:'save_reading',username:U.username,row});
+  return r.ok;
+}
+async function loadReadings(){
+  if(!U?.webhook) return;
+  const r=await gasGet(U.webhook,{action:'get_readings',username:U.username});
+  if(r.ok) readings=r.readings||[];
+}
+async function syncSheets(){
+  const btn=el('btn-sync');
+  btn.disabled=true; btn.innerHTML='<span class="spin">⏳</span> Đồng bộ...';
+  await loadReadings();
+  renderHistory(); refreshDashboard();
+  btn.disabled=false; btn.innerHTML='🔄 Đồng bộ Sheets';
+}
+
+// ════════════════════════════════════════════════════════════
+//  MQTT
+// ════════════════════════════════════════════════════════════
+let mqttCfg = null;
+function setupMqttConfig(){
+  if(!U) return;
+  mqttCfg={host:U.mhost,port:U.mport||8884,topic:U.mtopic||'glucotrack/sensor',
+    user:U.muser||'',pass:U.mpass||''};
+}
+function toggleMqtt(){ mqttOK ? disconnectMqtt() : connectMqtt(); }
+function connectMqtt(){
+  if(!mqttCfg||!mqttCfg.host){ setMqttUI('off','Chưa cấu hình MQTT'); return; }
+  setMqttUI('conn','Đang kết nối...');
+  const cid='gt_'+Math.random().toString(36).slice(2,10);
+  mqttClient = new Paho.Client(mqttCfg.host, mqttCfg.port, cid);
+  mqttClient.onConnectionLost = r=>{
+    mqttOK=false; hasFinger=false;
+    setMqttUI('off','Mất kết nối: '+r.errorMessage);
+    updateFingerUI(false); updateStartBtn();
+    setTimeout(connectMqtt,5000);
+  };
+  mqttClient.onMessageArrived = m=>handleMsg(m.payloadString);
+  const opts={useSSL:true,timeout:10,
+    onSuccess:()=>{
+      mqttOK=true; setMqttUI('on','✓ Đã kết nối HiveMQ');
+      mqttClient.subscribe(mqttCfg.topic,{qos:0});
+    },
+    onFailure:e=>{ mqttOK=false; setMqttUI('off','Lỗi: '+e.errorMessage); }
+  };
+  if(mqttCfg.user){opts.userName=mqttCfg.user;opts.password=mqttCfg.pass;}
+  try{ mqttClient.connect(opts); }catch(e){ setMqttUI('off','Lỗi: '+e.message); }
+}
+function disconnectMqtt(){
+  if(mqttClient&&mqttOK) try{mqttClient.disconnect();}catch(_){}
+  mqttOK=false; hasFinger=false;
+  setMqttUI('off','Đã ngắt kết nối');
+  updateFingerUI(false); updateStartBtn();
+}
+function setMqttUI(state,txt){
+  ['dot-top','dot-meas'].forEach(id=>{
+    const d=el(id); if(d) d.className='mdot '+state;
+  });
+  const t=el('mqtt-txt'); if(t) t.textContent=txt;
+  const top=el('mqtt-top');
+  if(top) top.innerHTML=`<span class="mdot ${state}" id="dot-top"></span>MQTT: ${state==='on'?'Kết nối':state==='conn'?'Đang kết nối':'–'}`;
+  const btn=el('btn-mqtt');
+  if(btn){
+    btn.textContent = mqttOK?'Ngắt kết nối':'Kết nối HiveMQ';
+    btn.className   = mqttOK?'btn btn-danger btn-full':'btn btn-primary btn-full';
+  }
+}
+
+// ── Xử lý tin nhắn MQTT ──────────────────────────
+function handleMsg(payload){
+  let parsed=null;
+  try{ parsed=JSON.parse(payload); }
+  catch{ parsed=parseCSV(payload); }
+  if(!parsed) return;
+
+  const ir = parseFloat(parsed.ir_raw??parsed.IR??0);
+  hasFinger = ir>50000;
+  updateFingerUI(hasFinger);
+
+  if(!hasFinger){ FILTER_KEYS.forEach(k=>filters[k].reset()); return; }
+
+  // 3-layer filter
+  const filt={...parsed};
+  FILTER_KEYS.forEach(k=>{ if(parsed[k]!==undefined) filt[k]=+filters[k].push(parseFloat(parsed[k])).toFixed(3); });
+  liveData=filt;
+  updateVitals(filt);
+  el('filter-badge').style.display='';
+
+  // Tích lũy mẫu khi đang đo
+  if(msActive&&!msDone){
+    msSamples.push(filt);
+    const elapsed=Date.now()-msStart;
+    const rem=Math.max(0,Math.ceil((10000-elapsed)/1000));
+    const pct=Math.min(100,(elapsed/10000)*100);
+    el('cdown').textContent=rem;
+    el('samp-cnt').textContent=`${msSamples.length} mẫu đã thu thập`;
+    setRing(pct);
+    if(elapsed>=10000){
+      msActive=false; msDone=true;
+      msResult=aggregate(msSamples);
+      clearInterval(waveIv); waveIv=null;
+      showResult();
+    }
+  }
+}
+function parseCSV(line){
+  line=line.trim();
+  if(!line||line.startsWith('#')) return null;
+  const p=line.split(',');
+  if(p.length<16) return null;
+  try{
+    const v=p.map(x=>parseFloat(x.trim()));
+    return{f1:v[0],f2:v[1],f3:v[2],f4:v[3],f5:v[4],f6:v[5],f7:v[6],f8:v[7],
+      nir:v[8],clear:v[9],flicker:v[10],ir_raw:v[11],red_raw:v[12],hr_bpm:v[13],spo2:v[14],temp_c:v[15]};
+  }catch{return null;}
+}
+function aggregate(samples){
+  if(!samples.length) return {};
+  const keys=Object.keys(samples[0]).filter(k=>typeof samples[0][k]==='number');
+  const out={};
+  keys.forEach(k=>{
+    const vals=samples.map(s=>s[k]).filter(v=>typeof v==='number').sort((a,b)=>a-b);
+    const trim=Math.max(1,Math.floor(vals.length/10));
+    const t=vals.length>4?vals.slice(trim,vals.length-trim):vals;
+    out[k]=+(t.reduce((a,b)=>a+b,0)/t.length).toFixed(3);
+  });
+  return out;
+}
+function updateVitals(d){
+  const ir=d.ir_raw; if(ir!==undefined){
+    el('v-ir').textContent=Math.round(ir).toLocaleString();
+    el('v-ir-q').textContent=ir>80000?'🟢 Tốt':ir>40000?'🟡 TB':'🔴 Yếu';
+  }
+  const hr=d.hr_bpm; if(hr!==undefined) el('v-hr').textContent=Math.round(hr);
+  const sp=d.spo2;   if(sp!==undefined) el('v-spo2').textContent=parseFloat(sp).toFixed(1);
+  const tp=d.temp_c; if(tp!==undefined) el('v-temp').textContent=parseFloat(tp).toFixed(1);
+}
+function updateFingerUI(f){
+  const pill=el('finger-pill'),dot=el('finger-dot'),lbl=el('finger-lbl');
+  if(f){
+    if(pill){pill.style.background='#14532d44';pill.style.borderColor='#16a34a44';}
+    if(dot){dot.style.background='var(--ok)';dot.style.boxShadow='0 0 6px var(--ok)';}
+    if(lbl){lbl.textContent='✓ Ngón tay đã đặt — sẵn sàng đo';lbl.style.color='var(--ok)';}
+  }else{
+    if(pill){pill.style.background='var(--sur2)';pill.style.borderColor='var(--bor)';}
+    if(dot){dot.style.background='var(--mut)';dot.style.boxShadow='none';}
+    if(lbl){lbl.textContent='Chưa phát hiện ngón tay';lbl.style.color='var(--mut)';}
+  }
+  updateStartBtn();
+}
+function updateStartBtn(){
+  const btn=el('btn-start'); if(!btn) return;
+  const ok=mqttOK&&hasFinger&&msState==='idle';
+  btn.disabled=!ok;
+  const h=el('start-hint'); if(!h) return;
+  h.textContent=!mqttOK?'Kết nối MQTT trước':!hasFinger?'Đặt ngón tay vào cảm biến':'';
+}
+
+// ════════════════════════════════════════════════════════════
+//  MEASURE
+// ════════════════════════════════════════════════════════════
+function switchTab(t){
+  el('mtab-sensor').style.display=t==='sensor'?'':'none';
+  el('mtab-manual').style.display=t==='manual'?'':'none';
+  el('tab-sensor').classList.toggle('active',t==='sensor');
+  el('tab-manual').classList.toggle('active',t==='manual');
+}
+function setMS(s){
+  msState=s;
+  el('ms-idle').style.display     =s==='idle'?'':'none';
+  el('ms-measuring').style.display=s==='measuring'?'':'none';
+  el('ms-done').style.display     =s==='done'?'':'none';
+  updateStartBtn();
+}
+function startMeasure(){
+  if(!mqttOK||!hasFinger) return;
+  FILTER_KEYS.forEach(k=>filters[k].reset());
+  msActive=true; msStart=Date.now(); msSamples=[]; msDone=false; msResult=null;
+  el('meas-advice').style.display='none';
+  el('res-saved').style.display='none';
+  setMS('measuring');
+  el('cdown').textContent='10'; setRing(0);
+  el('samp-cnt').textContent='0 mẫu đã thu thập';
+  el('meas-glow').style.background='radial-gradient(ellipse 70% 50% at 50% 50%,#3b82f611,transparent)';
+  waveIv=setInterval(()=>document.querySelectorAll('.wbar').forEach(b=>b.style.height=(6+Math.random()*26)+'px'),120);
+}
+function setRing(pct){
+  const r=el('prog-ring'); if(r) r.setAttribute('stroke-dashoffset',490-(pct/100)*490);
+}
+function showResult(){
+  if(!msResult||!U){setMS('idle');return;}
+  const d=msResult, bmi=U.bmi||22, dtype=U.diabetes_type||'Type 2';
+  const ir=d.ir_raw||0,red=d.red_raw||0,nir=d.nir||500,hr=d.hr_bpm||0,sp=d.spo2||97,tp=d.temp_c||36.6;
+  const g=estGlucose(ir,bmi,hr,tp,nir,red);
+  const st=gStatus(g), adv=getAdvice(g,dtype);
+  const sm={critical_low:['⚠️','Hạ đường huyết','badge-critical'],normal:['✅','Bình thường','badge-ok'],
+    borderline:['🟡','Sau ăn OK','badge-warn'],high:['🟡','Tăng vừa','badge-warn'],danger:['🔴','Nguy hiểm','badge-danger']};
+  const[icon,lbl,bc]=sm[st]||['📊','–','badge-info'];
+  el('res-icon').textContent=icon;
+  el('res-glucose').textContent=g; el('res-glucose').style.color=gColor(g);
+  el('res-badge').innerHTML=`<span class="badge ${bc}" style="font-size:13px;padding:5px 16px">${lbl}</span>`;
+  el('res-vitals').innerHTML=[hr?`❤️ ${Math.round(hr)} bpm`:'',sp?`🫁 SpO₂ ${parseFloat(sp).toFixed(1)}%`:'',
+    tp?`🌡 ${parseFloat(tp).toFixed(1)}°C`:'',`📊 ${msSamples.length} mẫu`].filter(Boolean).map(s=>`<span>${s}</span>`).join('');
+  el('meas-glow').style.background=`radial-gradient(ellipse 70% 50% at 50% 50%,${gColor(g)}0a,transparent)`;
+  const note=el('meas-note')?.value||`Cảm biến (${msSamples.length} mẫu)`;
+  lastSaved={
+    timestamp:new Date().toLocaleString('vi-VN'),glucose_mgdl:g,status:st,
+    ir_raw:+ir.toFixed(1),nir:+nir.toFixed(1),red_raw:+red.toFixed(1),
+    hr_bpm:+hr.toFixed(1),spo2:+sp.toFixed(2),temp_c:+tp.toFixed(2),
+    f1:+(d.f1||0).toFixed(1),f2:+(d.f2||0).toFixed(1),f3:+(d.f3||0).toFixed(1),
+    f4:+(d.f4||0).toFixed(1),f5:+(d.f5||0).toFixed(1),f6:+(d.f6||0).toFixed(1),
+    f7:+(d.f7||0).toFixed(1),f8:+(d.f8||0).toFixed(1),
+    nir_clear_ratio:+(nir/Math.max(d.clear||1200,1)).toFixed(4),
+    ir_red_ratio:+(ir/Math.max(red,1)).toFixed(4),
+    bmi_at_measure:bmi,note,_adv:adv
+  };
+  setMS('done');
+}
+async function saveAndAdvice(){
+  if(!lastSaved) return;
+  const row={...lastSaved}; const adv=row._adv; delete row._adv;
+  readings.push(row);
+  const ok=await gasSaveReading(row);
+  el('res-saved').style.display='';
+  el('res-saved').textContent=ok?`✓ Đã lưu vào Google Sheets — ${new Date().toLocaleTimeString('vi-VN')}`
+    :`✓ Lưu cục bộ (Sheets lỗi) — ${new Date().toLocaleTimeString('vi-VN')}`;
+  const ap=el('meas-advice'); ap.style.display=''; ap.innerHTML=buildAdvice(row.glucose_mgdl,adv);
+  ap.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+async function doManual(){
+  const g=+v('m-g'),hr=v('m-hr'),note=v('m-note');
+  if(!g){alert2('man-alert','Nhập giá trị đường huyết','err');return;}
+  const row={timestamp:new Date().toLocaleString('vi-VN'),glucose_mgdl:g,status:gStatus(g),
+    ir_raw:'',nir:'',red_raw:'',hr_bpm:hr||'',spo2:'',temp_c:'',
+    f1:'',f2:'',f3:'',f4:'',f5:'',f6:'',f7:'',f8:'',
+    nir_clear_ratio:'',ir_red_ratio:'',bmi_at_measure:U?.bmi||'',
+    note:note||'Nhập tay từ máy que thử'};
+  readings.push(row); await gasSaveReading(row);
+  const ap=el('man-advice'); ap.style.display=''; ap.innerHTML=buildAdvice(g,getAdvice(g,U?.diabetes_type||'Type 2'));
+  ap.scrollIntoView({behavior:'smooth',block:'nearest'});
+  el('m-g').value=''; el('m-note').value='';
+  alert2('man-alert','','');
+}
+
+// ════════════════════════════════════════════════════════════
+//  GLUCOSE MATHS (mirrors Python)
+// ════════════════════════════════════════════════════════════
+function estGlucose(ir,bmi,hr,temp,nir=500,red=0){
+  const n=Math.max(300,Math.min(700,ir/200));
+  const g=60+(n-300)*.35+(bmi-22)*1.8+(hr>0?(hr-70)*.15:0)+(temp>30?(temp-36.6)*2:0);
+  return Math.round(Math.max(40,Math.min(450,g))*10)/10;
+}
+function gStatus(v){ return v<70?'critical_low':v<=130?'normal':v<=180?'borderline':v<=250?'high':'danger'; }
+function gColor(v){
+  v=+v; if(!v) return 'var(--mut)';
+  if(v<70)   return '#ef4444';
+  if(v<=130) return '#22c55e';
+  if(v<=180) return '#f59e0b';
+  if(v<=250) return '#f97316';
+  return '#dc2626';
+}
+function getAdvice(mg,dtype){
+  const t=(dtype||'').toUpperCase().replace(/\s/g,'');
+  const is1=t.includes('1');
+  let a;
+  if(mg<70){
+    a={level:'critical_low',title:'⚠️ HẠ ĐƯỜNG HUYẾT — CẤP CỨU NGAY',color:'#ef4444',urgent:true,
+      steps:['🍬 NGAY LẬP TỨC: Ăn/uống 15g carbohydrate hấp thu nhanh',
+        '→ ½ lon nước ngọt có đường, 3–4 viên kẹo, hoặc 1 thìa mật ong',
+        '→ TUYỆT ĐỐI không ăn chocolate hay bánh quy (mỡ làm chậm hấp thu)',
+        '⏱ Đợi 15 phút rồi đo lại','🔁 Nếu vẫn < 70 mg/dL → lặp lại bước trên',
+        '🍞 Khi đã > 70 mg/dL → ăn nhẹ nếu bữa ăn còn > 1 giờ'],
+      type_note:is1?'🔴 Type 1: Luôn mang Glucagon. Người nhà phải biết cách dùng khi bạn bất tỉnh.'
+        :'🟡 Type 2: Nếu hạ đường huyết liên tục → báo bác sĩ để giảm liều thuốc.'};
+  }else if(mg<=180){
+    a={level:'normal',title:'✅ MỨC MỤC TIÊU — Vùng an toàn ADA',color:'#22c55e',urgent:false,
+      steps:['Đây là vùng lý tưởng (70–130 lúc đói / dưới 180 sau ăn 2h)',
+         '✓ Tiếp tục duy trì chế độ ăn và vận động hiện tại',
+        '📅 Đo lại định kỳ để theo dõi xu hướng'],
+      type_note:is1?'💉 Type 1: Tiếp tục tính liều insulin theo lượng carb bữa ăn.'
+        :'💊 Type 2: Duy trì chế độ ăn, uống thuốc đúng giờ, tập 150 phút/tuần.'};
+  }else if(mg<=250){
+    a={level:'high',title:'🟡 TĂNG ĐƯỜNG HUYẾT VỪA — Cần hành động',color:'#f59e0b',urgent:false,
+      steps:['💧 Uống thêm nước lọc (giúp thận đào thải đường)',
+        '🚶 Đi bộ nhanh 15–20 phút nếu cảm thấy khỏe',
+        '📋 Kiểm tra: Bữa ăn trước có nhiều tinh bột? Có quên thuốc không?',
+        '⚠️ Không tự ý tăng liều thuốc viên'],
+      type_note:is1?'💉 Type 1: Tiêm insulin hiệu chỉnh theo tỷ lệ bác sĩ hướng dẫn. Uống nhiều nước.'
+        :'💊 Type 2: Đi bộ 15–20 phút rất hiệu quả. Xem lại bữa ăn và liều thuốc.'};
+  }else{
+    a={level:'danger',title:'🔴 TĂNG ĐƯỜNG HUYẾT NGUY HIỂM — Cần xử lý ngay',color:'#ef4444',urgent:true,
+      steps:['💧 Uống ngay 2–3 ly nước lọc',
+        '📵 KHÔNG tập thể dục mạnh (Type 1 có thể làm keton tăng vọt)',
+        '📏 Đo lại sau 2 giờ',
+        '🏥 Nếu liên tục > 300 mg/dL qua 2–3 lần đo → liên hệ bác sĩ ngay'],
+      type_note:is1?'🚨 Type 1 — NGUY CƠ NHIỄM TOAN KETON (DKA):\n→ Kiểm tra Keton ngay bằng que thử.\n→ Keton (+): TUYỆT ĐỐI không tập thể dục.\n→ Nôn mửa / đau bụng / khó thở → GỌI CẤP CỨU 115 ngay.'
+        :'⚠️ Type 2 — Nguy cơ mất nước nghiêm trọng (HHS):\n→ Uống nước liên tục.\n→ > 300 liên tục 2–3 lần → báo bác sĩ để chỉnh thuốc.'};
+  }
+  a.golden_rule='💡 Nguyên tắc vàng: Đừng phản ứng thái quá với 1 chỉ số đơn lẻ. Nếu đang cao, đừng tiêm quá nhiều insulin — dễ gây hạ đường huyết nghiêm trọng sau vài giờ.';
+  return a;
+}
+function buildAdvice(g,a){
+  if(!a) return '';
+  return `<div class="advice-panel" style="border-color:${a.color}33;background:${a.color}0a">
+    <div class="advice-title" style="color:${a.color}">${a.title}</div>
+    <ul class="advice-steps">${a.steps.map(s=>`<li>${s}</li>`).join('')}</ul>
+    <div class="type-note">${a.type_note}</div>
+    <div class="golden-rule">${a.golden_rule}</div>
+  </div>`;
+}
+
+// ════ DASHBOARD ════
+function refreshDashboard(){
+  const today=new Date().toISOString().slice(0,10);
+  const todayR=readings.filter(r=>(r.timestamp||'').includes(today.split('-').reverse().join('/'))||
+    (r.timestamp||'').startsWith(today));
+  const last7=readings.filter(r=>(Date.now()-new Date(r.timestamp))<7*864e5);
+  const last=readings[readings.length-1];
+  if(last){
+    el('st-last').textContent=last.glucose_mgdl||'–';
+    el('st-last').style.color=gColor(last.glucose_mgdl);
+    el('st-last-t').textContent=last.timestamp||'';
+  }
+  el('st-avg').textContent=last7.length?Math.round(last7.reduce((s,r)=>s+(+r.glucose_mgdl||0),0)/last7.length):'–';
+  el('st-max').textContent=todayR.length?Math.max(...todayR.map(r=>+r.glucose_mgdl||0)):'–';
+  el('st-cnt').textContent=readings.length;
+  renderHomeChart();
+  if(last){ el('last-card').style.display=''; el('last-detail').innerHTML=buildDetail(last); }
+}
+
+// ════ CHARTS ════
+const CD={responsive:true,maintainAspectRatio:false,
+  plugins:{legend:{labels:{color:'#94a3b8',font:{size:11}}}},
+  scales:{x:{grid:{color:'#1e2d45'},ticks:{color:'#64748b',font:{size:10}}},
+          y:{grid:{color:'#1e2d45'},ticks:{color:'#64748b',font:{size:10}}}}};
+function byDays(n){
+  if(!n) return readings;
+  const c=Date.now()-n*864e5; return readings.filter(r=>new Date(r.timestamp)>=c);
+}
+function renderHomeChart(){
+  if(cHome) cHome.destroy();
+  cHome=buildLine(document.getElementById('chart-home').getContext('2d'),byDays(14));
+}
+function renderCharts(d){
+  chartRange=d;
+  document.querySelectorAll('#chart-tabs .tab').forEach((t,i)=>{ t.classList.remove('active'); if(i===[7,14,30,0].indexOf(d)) t.classList.add('active'); });
+  const data=byDays(d);
+  if(cMain) cMain.destroy();
+  cMain=buildLine(document.getElementById('chart-main').getContext('2d'),data);
+  renderHour(data); renderPie(data);
+}
+function switchRange(d){ renderCharts(d); }
+function buildLine(ctx,data){
+  const lbs=data.map(r=>{const d=new Date(r.timestamp);return`${d.getMonth()+1}/${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}`;});
+  const vals=data.map(r=>+r.glucose_mgdl||null);
+  const cols=vals.map(v=>gColor(v));
+  return new Chart(ctx,{type:'line',data:{labels:lbs,datasets:[
+    {label:'Đường huyết (mg/dL)',data:vals,borderColor:'#3b82f6',backgroundColor:'rgba(59,130,246,0.08)',borderWidth:2,pointBackgroundColor:cols,pointBorderColor:cols,pointRadius:4,pointHoverRadius:6,tension:.3,fill:true},
+    {label:'Mục tiêu đói (70–130)',data:Array(lbs.length).fill(130),borderColor:'#22c55e44',borderWidth:1,borderDash:[4,4],pointRadius:0,fill:false},
+    {label:'Ngưỡng nguy hiểm (250)',data:Array(lbs.length).fill(250),borderColor:'#ef444444',borderWidth:1,borderDash:[4,4],pointRadius:0,fill:false}
+  ]},options:{...CD,plugins:{...CD.plugins,tooltip:{backgroundColor:'#111827',borderColor:'#1e2d45',borderWidth:1,callbacks:{label:ctx=>{const v=ctx.raw;const s=v<70?'Hạ ĐH ⚠':v<=130?'Bình thường ✓':v<=180?'Sau ăn OK':v<=250?'Cao':'Nguy hiểm';return` ${v} mg/dL — ${s}`;}}}}}});
+}
+function renderHour(data){
+  if(cHour) cHour.destroy();
+  const bk=Array(24).fill(0).map(()=>({s:0,n:0}));
+  data.forEach(r=>{const h=new Date(r.timestamp).getHours(),v=+r.glucose_mgdl;if(!isNaN(v)){bk[h].s+=v;bk[h].n++;}});
+  const avgs=bk.map(b=>b.n?Math.round(b.s/b.n):null);
+  cHour=new Chart(document.getElementById('chart-hour').getContext('2d'),{type:'bar',
+    data:{labels:Array.from({length:24},(_,i)=>`${i}h`),datasets:[{label:'TB theo giờ',data:avgs,backgroundColor:avgs.map(v=>v?gColor(v)+'99':'#1e2d45'),borderColor:avgs.map(v=>v?gColor(v):'#1e2d45'),borderWidth:1,borderRadius:4}]},
+    options:{...CD,plugins:{legend:{display:false}}}});
+}
+function renderPie(data){
+  if(cPie) cPie.destroy();
+  const c={low:0,normal:0,b:0,high:0,danger:0};
+  data.forEach(r=>{const v=+r.glucose_mgdl;if(v<70)c.low++;else if(v<=130)c.normal++;else if(v<=180)c.b++;else if(v<=250)c.high++;else c.danger++;});
+  cPie=new Chart(document.getElementById('chart-pie').getContext('2d'),{type:'doughnut',
+    data:{labels:['Hạ ĐH (<70)','Bình thường','Sau ăn OK','Cao','Nguy hiểm'],datasets:[{data:Object.values(c),backgroundColor:['#ef4444','#22c55e','#f59e0b','#f97316','#dc2626'],borderColor:'#111827',borderWidth:2}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'right',labels:{color:'#94a3b8',font:{size:11},padding:12}}}}});
+}
+
+// ════ HISTORY ════
+function renderHistory(){
+  const rows=[...readings].reverse();
+  const bdg=s=>{const m={critical_low:['badge-critical','Hạ ĐH ⚠'],normal:['badge-ok','Bình thường'],borderline:['badge-warn','Sau ăn OK'],high:['badge-warn','Cao'],danger:['badge-danger','Nguy hiểm']};const[c,l]=m[s]||['badge-info',s];return`<span class="badge ${c}">${l}</span>`;};
+  el('hist-body').innerHTML=rows.map(r=>{
+    const v=+r.glucose_mgdl;
+    return`<tr>
+      <td style="color:var(--mut);font-size:12px">${r.timestamp||''}</td>
+      <td><strong style="color:${gColor(v)};font-family:'Syne',sans-serif;font-size:15px">${v||'–'}</strong> <span style="color:var(--mut);font-size:11px">mg/dL</span></td>
+      <td>${bdg(r.status||gStatus(v))}</td>
+      <td>${r.hr_bpm?r.hr_bpm+' bpm':'–'}</td>
+      <td>${r.spo2?r.spo2+'%':'–'}</td>
+      <td style="color:var(--mut);font-size:12px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.note||''}</td>
+    </tr>`;
+  }).join('')||'<tr><td colspan="6" style="text-align:center;color:var(--mut);padding:32px">Chưa có dữ liệu. Hãy bắt đầu đo!</td></tr>';
+}
+function exportCSV(){
+  if(!readings.length) return;
+  const h=Object.keys(readings[0]).join(','),r=readings.map(x=>Object.values(x).join(','));
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([h+'\n'+r.join('\n')],{type:'text/csv'}));
+  a.download=`glucotrack_${U?.username||'data'}_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+}
+
+// ════ PROFILE ════
+function loadProfileForm(){
+  if(!U) return;
+  el('pf-age').value=U.age||''; el('pf-w').value=U.weight_kg||'';
+  el('pf-h').value=U.height_cm||''; el('pf-dt').value=U.diabetes_type||'Type 2';
+  bmiDisp();
+  const tot=readings.length,lo=readings.filter(r=>+r.glucose_mgdl<70).length,hi=readings.filter(r=>+r.glucose_mgdl>180).length;
+  el('pf-stats').innerHTML=['Tổng lần đo','BMI hiện tại','Lần hạ ĐH','Lần tăng cao'].map((lbl,i)=>{
+    const vals=[tot,U.bmi||'–',lo,hi],cols=['var(--txt)','var(--txt)','var(--dan)','var(--war)'];
+    return`<div style="background:var(--sur2);padding:16px;border-radius:var(--r)">
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--mut)">${lbl}</div>
+      <div style="font-size:28px;font-weight:800;font-family:'Syne',sans-serif;color:${cols[i]};margin-top:4px">${vals[i]}</div>
+    </div>`;
+  }).join('');
+}
+function bmiDisp(){
+  const w=+v('pf-w'),h=+v('pf-h'); if(!w||!h) return;
+  const b=(w/(h/100)**2).toFixed(1);
+  const c=b<18.5?'Thiếu cân':b<23?'Bình thường':b<27.5?'Thừa cân':b<32.5?'Béo phì I':'Béo phì II+';
+  el('pf-bmi').textContent=`BMI = ${b} (${c})`;
+}
+['pf-w','pf-h'].forEach(id=>document.getElementById(id)?.addEventListener('input',bmiDisp));
+async function updateProfile(){
+  const age=+v('pf-age'),w=+v('pf-w'),h=+v('pf-h'),dt=v('pf-dt');
+  if(!age||!w||!h){alert2('pf-alert','Điền đầy đủ thông tin','err');return;}
+  const bmi=+(w/(h/100)**2).toFixed(1);
+  Object.assign(U,{age,weight_kg:w,height_cm:h,diabetes_type:dt,bmi,profile_updated:new Date().toISOString().slice(0,10)});
+  const cfg=loadConfig(); Object.assign(cfg,{age,weight_kg:w,height_cm:h,diabetes_type:dt,bmi}); saveConfig(cfg);
+  const r=await gasPost(U.webhook,{action:'update_profile',username:U.username,age,weight_kg:w,height_cm:h,diabetes_type:dt});
+  el('upd-banner').style.display='none';
+  alert2('pf-alert',r.ok?'✓ Đã cập nhật hồ sơ thành công':'✓ Cập nhật cục bộ (Sheets lỗi)','ok');
+  setTimeout(()=>alert2('pf-alert','',''),3000); bmiDisp();
+}
+
+// ════ APPS SCRIPT MODAL ════
+function showScriptModal(){
+  el('script-code-block').textContent=GAS_CODE;
+  el('modal-script').classList.add('show');
+  return false;
+}
+function closeModal(id){ el(id).classList.remove('show'); }
+async function copyScript(){
+  await navigator.clipboard.writeText(GAS_CODE);
+  const btn=event.target; btn.textContent='✅ Đã copy!';
+  setTimeout(()=>btn.textContent='📋 Copy code',2000);
+}
+
+// ════ HELPERS ════
+function el(id){ return document.getElementById(id); }
+function v(id){ return (document.getElementById(id)||{}).value||''; }
+function alert2(id,msg,type){
+  const e=el(id); if(!e) return;
+  if(!msg){e.innerHTML='';return;}
+  if(msg.startsWith('<')){e.innerHTML=msg;return;}
+  e.innerHTML=`<div class="alert alert-${type==='err'?'err':'ok'}">${msg}</div>`;
+}
+function buildDetail(r){
+  const vv=+r.glucose_mgdl,c=gColor(vv);
+  return`<div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+    <div><div style="font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.6px">Đường huyết</div>
+      <div style="font-size:36px;font-weight:800;font-family:'Syne',sans-serif;color:${c}">${vv} <span style="font-size:14px;color:var(--mut)">mg/dL</span></div></div>
+    ${r.hr_bpm?`<div><div style="font-size:11px;color:var(--mut)">Nhịp tim</div><div style="font-size:24px;font-weight:700;font-family:'Syne',sans-serif;color:var(--dan)">${Math.round(r.hr_bpm)} bpm</div></div>`:''}
+    ${r.spo2?`<div><div style="font-size:11px;color:var(--mut)">SpO2</div><div style="font-size:24px;font-weight:700;font-family:'Syne',sans-serif;color:var(--ok)">${parseFloat(r.spo2).toFixed(1)}%</div></div>`:''}
+    <div><div style="font-size:11px;color:var(--mut)">Thời gian</div><div style="font-size:13px;color:var(--mut);margin-top:4px">${r.timestamp||''}</div></div>
+  </div>`;
+}
+function saveConfig(cfg){ localStorage.setItem('gt_cfg',JSON.stringify(cfg)); }
+function loadConfig(){ try{return JSON.parse(localStorage.getItem('gt_cfg')||'{}')}catch{return{}} }
+
+// ════ AUTO-LOGIN ════
+(async()=>{
+  const cfg=loadConfig();
+  if(cfg.username&&cfg.webhook&&cfg.mhost){
+    const r=await gasGet(cfg.webhook,{action:'get_profile',username:cfg.username}).catch(()=>null);
+    if(r?.ok){
+      U={...r.user,...cfg};
+      setupMqttConfig();
+      await loadReadings();
+      afterLogin();
+      return;
+    }
+  }
+  el('pg-setup').classList.add('show');
+})();
+</script>
+</body>
+</html>
