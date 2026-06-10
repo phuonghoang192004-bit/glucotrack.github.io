@@ -347,7 +347,6 @@ a{color:var(--acc);text-decoration:none}
                 <div class="vbox"><div class="vlabel">IR Signal</div><div id="v-ir" class="vval">–</div><div class="vsub" id="v-ir-q"></div></div>
                 <div class="vbox"><div class="vlabel">Nhịp tim</div><div id="v-hr" class="vval" style="color:var(--dan)">–</div><div class="vsub">bpm</div></div>
                 <div class="vbox"><div class="vlabel">SpO₂</div><div id="v-spo2" class="vval" style="color:var(--ok)">–</div><div class="vsub">%</div></div>
-                <div class="vbox"><div class="vlabel">Nhiệt độ</div><div id="v-temp" class="vval" style="color:var(--acc2)">–</div><div class="vsub">°C</div></div>
               </div>
               <div id="filter-badge" style="display:none;margin-top:12px;font-size:11px;color:var(--mut);text-align:center;padding:6px;background:var(--sur2);border-radius:8px">SMA ✓ &nbsp;|&nbsp; Median ✓ &nbsp;|&nbsp; LPF ✓</div>
             </div>
@@ -515,7 +514,7 @@ const GAS_CODE = `// GlucoTrack — Google Apps Script
 
 const HEADERS = [
   "timestamp","glucose_mgdl","status",
-  "ir_raw","nir","red_raw","hr_bpm","spo2","temp_c",
+  "ir_raw","nir","red_raw","hr_bpm","spo2",
   "f1","f2","f3","f4","f5","f6","f7","f8",
   "nir_clear_ratio","ir_red_ratio","bmi_at_measure","note"
 ];
@@ -671,7 +670,7 @@ class SigFilter {
   }
   reset(){ this.sma=[]; this.med=[]; this.lpf=null; }
 }
-const FILTER_KEYS = ['ir_raw','red_raw','nir','hr_bpm','spo2','temp_c',
+const FILTER_KEYS = ['ir_raw','red_raw','nir','hr_bpm','spo2',
                      'f1','f2','f3','f4','f5','f6','f7','f8'];
 const filters = {};
 FILTER_KEYS.forEach(k=>filters[k]=new SigFilter());
@@ -930,7 +929,7 @@ function parseCSV(line){
   try{
     const v=p.map(x=>parseFloat(x.trim()));
     return{f1:v[0],f2:v[1],f3:v[2],f4:v[3],f5:v[4],f6:v[5],f7:v[6],f8:v[7],
-      nir:v[8],clear:v[9],flicker:v[10],ir_raw:v[11],red_raw:v[12],hr_bpm:v[13],spo2:v[14],temp_c:v[15]};
+      nir:v[8],clear:v[9],flicker:v[10],ir_raw:v[11],red_raw:v[12],hr_bpm:v[13],spo2:v[14]};
   }catch{return null;}
 }
 function aggregate(samples){
@@ -954,7 +953,6 @@ function updateVitals(d){
   const hr = d.hr_ema !== undefined ? d.hr_ema : d.hr_bpm;
   if(hr !== undefined) el('v-hr').textContent = Math.round(parseFloat(hr));
   const sp=d.spo2;   if(sp!==undefined) el('v-spo2').textContent=parseFloat(sp).toFixed(1);
-  const tp=d.temp_c; if(tp!==undefined) el('v-temp').textContent=parseFloat(tp).toFixed(1);
 }
 function updateFingerUI(f){
   const pill=el('finger-pill'),dot=el('finger-dot'),lbl=el('finger-lbl');
@@ -1014,8 +1012,8 @@ function showResult(){
   const ir=d.ir_raw||0,red=d.red_raw||0,nir=d.nir||500;
   // hr_ema ưu tiên hơn hr_bpm (EMA ổn định từ ESP)
   const hr=(d.hr_ema!==undefined?+d.hr_ema:d.hr_bpm)||0;
-  const sp=d.spo2||97,tp=d.temp_c||36.6;
-  const g=estGlucose(ir,bmi,hr,tp,nir,red);
+  const sp=d.spo2||97;
+  const g=estGlucose(ir,bmi,hr,nir,red);
   const st=gStatus(g), adv=getAdvice(g,dtype);
   const sm={critical_low:['⚠️','Hạ đường huyết','badge-critical'],normal:['✅','Bình thường','badge-ok'],
     borderline:['🟡','Sau ăn OK','badge-warn'],high:['🟡','Tăng vừa','badge-warn'],danger:['🔴','Nguy hiểm','badge-danger']};
@@ -1024,13 +1022,13 @@ function showResult(){
   el('res-glucose').textContent=g; el('res-glucose').style.color=gColor(g);
   el('res-badge').innerHTML=`<span class="badge ${bc}" style="font-size:13px;padding:5px 16px">${lbl}</span>`;
   el('res-vitals').innerHTML=[hr?`❤️ ${Math.round(hr)} bpm`:'',sp?`🫁 SpO₂ ${parseFloat(sp).toFixed(1)}%`:'',
-    tp?`🌡 ${parseFloat(tp).toFixed(1)}°C`:'',`📊 ${msSamples.length} mẫu`].filter(Boolean).map(s=>`<span>${s}</span>`).join('');
+    `📊 ${msSamples.length} mẫu`].filter(Boolean).map(s=>`<span>${s}</span>`).join('');
   el('meas-glow').style.background=`radial-gradient(ellipse 70% 50% at 50% 50%,${gColor(g)}0a,transparent)`;
   const note=el('meas-note')?.value||`Cảm biến (${msSamples.length} mẫu)`;
   lastSaved={
     timestamp:new Date().toLocaleString('vi-VN'),glucose_mgdl:g,status:st,
     ir_raw:+ir.toFixed(1),nir:+nir.toFixed(1),red_raw:+red.toFixed(1),
-    hr_bpm:+hr.toFixed(1),spo2:+sp.toFixed(2),temp_c:+tp.toFixed(2),
+    hr_bpm:+hr.toFixed(1),spo2:+sp.toFixed(2),
     f1:+(d.f1||0).toFixed(1),f2:+(d.f2||0).toFixed(1),f3:+(d.f3||0).toFixed(1),
     f4:+(d.f4||0).toFixed(1),f5:+(d.f5||0).toFixed(1),f6:+(d.f6||0).toFixed(1),
     f7:+(d.f7||0).toFixed(1),f8:+(d.f8||0).toFixed(1),
@@ -1055,7 +1053,7 @@ async function doManual(){
   const g=+v('m-g'),hr=v('m-hr'),note=v('m-note');
   if(!g){alert2('man-alert','Nhập giá trị đường huyết','err');return;}
   const row={timestamp:new Date().toLocaleString('vi-VN'),glucose_mgdl:g,status:gStatus(g),
-    ir_raw:'',nir:'',red_raw:'',hr_bpm:hr||'',spo2:'',temp_c:'',
+    ir_raw:'',nir:'',red_raw:'',hr_bpm:hr||'',spo2:'',
     f1:'',f2:'',f3:'',f4:'',f5:'',f6:'',f7:'',f8:'',
     nir_clear_ratio:'',ir_red_ratio:'',bmi_at_measure:U?.bmi||'',
     note:note||'Nhập tay từ máy que thử'};
@@ -1069,9 +1067,9 @@ async function doManual(){
 // ════════════════════════════════════════════════════════════
 //  GLUCOSE MATHS (mirrors Python)
 // ════════════════════════════════════════════════════════════
-function estGlucose(ir,bmi,hr,temp,nir=500,red=0){
+function estGlucose(ir,bmi,hr,nir=500,red=0){
   const n=Math.max(300,Math.min(700,ir/200));
-  const g=60+(n-300)*.35+(bmi-22)*1.8+(hr>0?(hr-70)*.15:0)+(temp>30?(temp-36.6)*2:0);
+  const g=60+(n-300)*.35+(bmi-22)*1.8+(hr>0?(hr-70)*.15:0);
   return Math.round(Math.max(40,Math.min(450,g))*10)/10;
 }
 function gStatus(v){ return v<70?'critical_low':v<=130?'normal':v<=180?'borderline':v<=250?'high':'danger'; }
