@@ -890,8 +890,10 @@ function handleMsg(payload){
   catch{ parsed=parseCSV(payload); }
   if(!parsed) return;
 
+  // Phát hiện ngón tay: ưu tiên field glucose_mgdl có mặt (ESP chỉ publish khi có ngón tay)
+  // Fallback: ir_raw > 15000 (threshold thực tế từ hardware)
   const ir = parseFloat(parsed.ir_raw??parsed.IR??0);
-  hasFinger = ir>50000;
+  hasFinger = (parsed.glucose_mgdl !== undefined) || ir > 15000;
   updateFingerUI(hasFinger);
 
   if(!hasFinger){ FILTER_KEYS.forEach(k=>filters[k].reset()); return; }
@@ -948,7 +950,9 @@ function updateVitals(d){
     el('v-ir').textContent=Math.round(ir).toLocaleString();
     el('v-ir-q').textContent=ir>80000?'🟢 Tốt':ir>40000?'🟡 TB':'🔴 Yếu';
   }
-  const hr=d.hr_bpm; if(hr!==undefined) el('v-hr').textContent=Math.round(hr);
+  // hr_ema = EMA đã ổn định từ ESP (ưu tiên); hr_bpm = beatAvg buffer (fallback)
+  const hr = d.hr_ema !== undefined ? d.hr_ema : d.hr_bpm;
+  if(hr !== undefined) el('v-hr').textContent = Math.round(parseFloat(hr));
   const sp=d.spo2;   if(sp!==undefined) el('v-spo2').textContent=parseFloat(sp).toFixed(1);
   const tp=d.temp_c; if(tp!==undefined) el('v-temp').textContent=parseFloat(tp).toFixed(1);
 }
@@ -1007,7 +1011,10 @@ function setRing(pct){
 function showResult(){
   if(!msResult||!U){setMS('idle');return;}
   const d=msResult, bmi=U.bmi||22, dtype=U.diabetes_type||'Type 2';
-  const ir=d.ir_raw||0,red=d.red_raw||0,nir=d.nir||500,hr=d.hr_bpm||0,sp=d.spo2||97,tp=d.temp_c||36.6;
+  const ir=d.ir_raw||0,red=d.red_raw||0,nir=d.nir||500;
+  // hr_ema ưu tiên hơn hr_bpm (EMA ổn định từ ESP)
+  const hr=(d.hr_ema!==undefined?+d.hr_ema:d.hr_bpm)||0;
+  const sp=d.spo2||97,tp=d.temp_c||36.6;
   const g=estGlucose(ir,bmi,hr,tp,nir,red);
   const st=gStatus(g), adv=getAdvice(g,dtype);
   const sm={critical_low:['⚠️','Hạ đường huyết','badge-critical'],normal:['✅','Bình thường','badge-ok'],
@@ -1205,7 +1212,7 @@ function renderHistory(){
       <td style="color:var(--mut);font-size:12px">${r.timestamp||''}</td>
       <td><strong style="color:${gColor(v)};font-family:'Syne',sans-serif;font-size:15px">${v||'–'}</strong> <span style="color:var(--mut);font-size:11px">mg/dL</span></td>
       <td>${bdg(r.status||gStatus(v))}</td>
-      <td>${r.hr_bpm?r.hr_bpm+' bpm':'–'}</td>
+      <td>${(r.hr_ema||r.hr_bpm)?Math.round(r.hr_ema||r.hr_bpm)+' bpm':'–'}</td>
       <td>${r.spo2?r.spo2+'%':'–'}</td>
       <td style="color:var(--mut);font-size:12px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.note||''}</td>
     </tr>`;
@@ -1281,7 +1288,7 @@ function buildDetail(r){
   return`<div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
     <div><div style="font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.6px">Đường huyết</div>
       <div style="font-size:36px;font-weight:800;font-family:'Syne',sans-serif;color:${c}">${vv} <span style="font-size:14px;color:var(--mut)">mg/dL</span></div></div>
-    ${r.hr_bpm?`<div><div style="font-size:11px;color:var(--mut)">Nhịp tim</div><div style="font-size:24px;font-weight:700;font-family:'Syne',sans-serif;color:var(--dan)">${Math.round(r.hr_bpm)} bpm</div></div>`:''}
+    ${(r.hr_ema||r.hr_bpm)?`<div><div style="font-size:11px;color:var(--mut)">Nhịp tim</div><div style="font-size:24px;font-weight:700;font-family:'Syne',sans-serif;color:var(--dan)">${Math.round(r.hr_ema||r.hr_bpm)} bpm</div></div>`:''}
     ${r.spo2?`<div><div style="font-size:11px;color:var(--mut)">SpO2</div><div style="font-size:24px;font-weight:700;font-family:'Syne',sans-serif;color:var(--ok)">${parseFloat(r.spo2).toFixed(1)}%</div></div>`:''}
     <div><div style="font-size:11px;color:var(--mut)">Thời gian</div><div style="font-size:13px;color:var(--mut);margin-top:4px">${r.timestamp||''}</div></div>
   </div>`;
