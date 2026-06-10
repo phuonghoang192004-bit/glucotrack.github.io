@@ -347,6 +347,7 @@ a{color:var(--acc);text-decoration:none}
                 <div class="vbox"><div class="vlabel">IR Signal</div><div id="v-ir" class="vval">–</div><div class="vsub" id="v-ir-q"></div></div>
                 <div class="vbox"><div class="vlabel">Nhịp tim</div><div id="v-hr" class="vval" style="color:var(--dan)">–</div><div class="vsub">bpm</div></div>
                 <div class="vbox"><div class="vlabel">SpO₂</div><div id="v-spo2" class="vval" style="color:var(--ok)">–</div><div class="vsub">%</div></div>
+                <div class="vbox" style="grid-column:1/-1"><div class="vlabel">Glucose ESP (realtime)</div><div style="display:flex;align-items:baseline;gap:6px"><div id="v-glucose-rt" class="vval" style="font-size:28px">–</div><div class="vsub">mg/dL</div><div id="v-glucose-cat" style="font-size:10px;color:var(--mut);margin-left:4px"></div></div></div>
               </div>
               <div id="filter-badge" style="display:none;margin-top:12px;font-size:11px;color:var(--mut);text-align:center;padding:6px;background:var(--sur2);border-radius:8px">SMA ✓ &nbsp;|&nbsp; Median ✓ &nbsp;|&nbsp; LPF ✓</div>
             </div>
@@ -934,6 +935,7 @@ function parseCSV(line){
 }
 function aggregate(samples){
   if(!samples.length) return {};
+  // Numeric fields: trung bình có cắt đuôi (trimmed mean)
   const keys=Object.keys(samples[0]).filter(k=>typeof samples[0][k]==='number');
   const out={};
   keys.forEach(k=>{
@@ -942,17 +944,41 @@ function aggregate(samples){
     const t=vals.length>4?vals.slice(trim,vals.length-trim):vals;
     out[k]=+(t.reduce((a,b)=>a+b,0)/t.length).toFixed(3);
   });
+  // String fields quan trọng từ ESP: lấy giá trị mẫu cuối (mới nhất)
+  // glucose_mgdl & spo2 & hr_ema từ ESP dùng serialized(String()) → là string
+  const last=samples[samples.length-1];
+  ['glucose_mgdl','glucose_cat','spo2','hr_ema'].forEach(k=>{
+    if(last[k]!==undefined && out[k]===undefined) out[k]=last[k];
+  });
+  // Nếu glucose_mgdl là string số, tính trung bình từ tất cả samples để chính xác hơn
+  const gVals=samples.map(s=>parseFloat(s.glucose_mgdl)).filter(v=>!isNaN(v));
+  if(gVals.length>0){
+    const trim=Math.max(1,Math.floor(gVals.length/10));
+    const sorted=gVals.slice().sort((a,b)=>a-b);
+    const t=gVals.length>4?sorted.slice(trim,sorted.length-trim):sorted;
+    out['glucose_mgdl']=(t.reduce((a,b)=>a+b,0)/t.length).toFixed(1);
+  }
   return out;
 }
 function updateVitals(d){
   const ir=d.ir_raw; if(ir!==undefined){
     el('v-ir').textContent=Math.round(ir).toLocaleString();
-    el('v-ir-q').textContent=ir>80000?'🟢 Tốt':ir>40000?'🟡 TB':'🔴 Yếu';
+    // Threshold thực tế: NIR ~20000 khi có ngón tay
+    el('v-ir-q').textContent=ir>100000?'🟢 Tốt':ir>15000?'🟡 TB':'🔴 Yếu';
   }
   // hr_ema = EMA đã ổn định từ ESP (ưu tiên); hr_bpm = beatAvg buffer (fallback)
   const hr = d.hr_ema !== undefined ? d.hr_ema : d.hr_bpm;
   if(hr !== undefined) el('v-hr').textContent = Math.round(parseFloat(hr));
-  const sp=d.spo2;   if(sp!==undefined) el('v-spo2').textContent=parseFloat(sp).toFixed(1);
+  const sp=d.spo2; if(sp!==undefined) el('v-spo2').textContent=parseFloat(sp).toFixed(1);
+  // Hiển thị glucose realtime từ ESP (nếu có)
+  const gv=el('v-glucose-rt');
+  if(gv && d.glucose_mgdl!==undefined){
+    const gVal=parseFloat(d.glucose_mgdl);
+    gv.textContent=gVal.toFixed(1);
+    gv.style.color=gColor(gVal);
+    const gc=el('v-glucose-cat');
+    if(gc && d.glucose_cat) gc.textContent=d.glucose_cat.replace('_',' ');
+  }
 }
 function updateFingerUI(f){
   const pill=el('finger-pill'),dot=el('finger-dot'),lbl=el('finger-lbl');
@@ -1013,7 +1039,11 @@ function showResult(){
   // hr_ema ưu tiên hơn hr_bpm (EMA ổn định từ ESP)
   const hr=(d.hr_ema!==undefined?+d.hr_ema:d.hr_bpm)||0;
   const sp=d.spo2||97;
-  const g=estGlucose(ir,bmi,hr,nir,red);
+  // ── Ưu tiên glucose_mgdl từ ESP (đã qua MLR + spectral correction) ──
+  // Chỉ fallback sang estGlucose() nếu ESP không gửi field này
+  const g = d.glucose_mgdl !== undefined
+    ? Math.round(parseFloat(d.glucose_mgdl) * 10) / 10
+    : estGlucose(ir,bmi,hr,nir,red);
   const st=gStatus(g), adv=getAdvice(g,dtype);
   const sm={critical_low:['⚠️','Hạ đường huyết','badge-critical'],normal:['✅','Bình thường','badge-ok'],
     borderline:['🟡','Sau ăn OK','badge-warn'],high:['🟡','Tăng vừa','badge-warn'],danger:['🔴','Nguy hiểm','badge-danger']};
